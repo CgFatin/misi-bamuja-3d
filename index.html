@@ -1,0 +1,943 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Misi BAMUJA: Labirin Jahitan 3D Enhanced</title>
+    <!-- Tailwind CSS for styling UI overlays -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Three.js for 3D rendering -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- Canvas Confetti Effect -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+        }
+        body {
+            font-family: 'Fredoka', cursive, sans-serif;
+            overflow: hidden;
+            background-color: #87CEEB;
+        }
+        
+        /* Custom Interactive UI Styling */
+        .game-btn {
+            transition: all 0.15s ease;
+            box-shadow: 0px 6px 0px rgba(0, 0, 0, 0.25);
+        }
+        .game-btn:active {
+            transform: translateY(4px);
+            box-shadow: 0px 2px 0px rgba(0, 0, 0, 0.25);
+        }
+
+        .pulse-glow {
+            animation: pulse-glow-anim 1.5s infinite alternate;
+        }
+
+        @keyframes pulse-glow-anim {
+            0% { transform: scale(1); box-shadow: 0 0 15px rgba(255, 215, 0, 0.6); }
+            100% { transform: scale(1.05); box-shadow: 0 0 28px rgba(255, 215, 0, 1); }
+        }
+
+        .bounce-anim {
+            animation: bounce-anim 1s infinite alternate ease-in-out;
+        }
+
+        @keyframes bounce-anim {
+            0% { transform: translateY(0); }
+            100% { transform: translateY(-8px); }
+        }
+
+        /* D-Pad Buttons for Touch Screen */
+        .dpad-btn {
+            background: linear-gradient(145deg, #3b82f6, #1d4ed8);
+            border: 3px solid #ffffff;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            font-weight: bold;
+            border-radius: 18px;
+            box-shadow: 0 5px 0 #1e40af;
+        }
+        .dpad-btn:active {
+            transform: translateY(3px);
+            box-shadow: 0 2px 0 #1e40af;
+            background: #2563eb;
+        }
+
+        /* Glassmorphism Panels */
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.92);
+            backdrop-filter: blur(8px);
+        }
+    </style>
+</head>
+<body class="w-screen h-screen relative bg-sky-300">
+
+    <!-- 3D Canvas Container -->
+    <div id="canvas-container" class="w-full h-full absolute inset-0"></div>
+
+    <!-- HUD Overlay Top Bar -->
+    <div class="absolute top-3 left-3 right-3 flex justify-between items-start pointer-events-none z-10 gap-2">
+        <!-- Progress Checklist & Collectibles -->
+        <div class="flex flex-col sm:flex-row gap-2">
+            <!-- Progress Checklist -->
+            <div class="glass-panel px-3 py-2 rounded-2xl border-4 border-yellow-400 shadow-lg flex items-center gap-2">
+                <span class="text-xs sm:text-sm font-bold text-gray-800">Misi:</span>
+                <div class="flex gap-1.5">
+                    <div id="badge-1" class="w-8 h-8 rounded-full bg-gray-300 flex items-center justify-center font-bold text-white text-xs border-2 border-white shadow">1</div>
+                    <div id="badge-2" class="w-8 h-8 rounded-full bg-gray-300 flex items-center justify-center font-bold text-white text-xs border-2 border-white shadow">2</div>
+                    <div id="badge-3" class="w-8 h-8 rounded-full bg-gray-300 flex items-center justify-center font-bold text-white text-xs border-2 border-white shadow">3</div>
+                </div>
+            </div>
+
+            <!-- Golden Button Collectibles Counter -->
+            <div class="glass-panel px-3 py-2 rounded-2xl border-4 border-amber-400 shadow-lg flex items-center gap-2 text-amber-900 font-extrabold text-sm sm:text-base">
+                <span class="text-xl">🪙</span>
+                <span id="button-count">0 / 8</span>
+            </div>
+        </div>
+
+        <!-- Mini-Map Radar 2D Canvas -->
+        <div class="glass-panel p-1.5 rounded-2xl border-4 border-white shadow-xl pointer-events-auto flex flex-col items-center">
+            <div class="text-[10px] font-black text-indigo-900 uppercase tracking-wider mb-1">Peta Radar</div>
+            <canvas id="minimap" width="100" height="100" class="rounded-xl bg-emerald-800 border-2 border-emerald-400"></canvas>
+        </div>
+    </div>
+
+    <!-- Objective Banner (Center Top) -->
+    <div class="absolute top-20 left-1/2 -translate-x-1/2 pointer-events-none z-10">
+        <div class="bg-yellow-400 text-slate-900 font-extrabold px-5 py-2 rounded-2xl border-4 border-white shadow-xl text-xs sm:text-sm bounce-anim whitespace-nowrap">
+            🎯 <span id="objective-text">Cari Kapur Tukang Jahit di Zone 1!</span>
+        </div>
+    </div>
+
+    <!-- Proximity Prompt Indicator -->
+    <div id="proximity-prompt" class="hidden absolute bottom-36 left-1/2 -translate-x-1/2 bg-yellow-300 border-4 border-white px-6 py-3 rounded-full shadow-2xl text-center z-20 pulse-glow pointer-events-none">
+        <p class="text-sm sm:text-lg font-black text-slate-900 flex items-center gap-2">
+            ✨ <span id="prompt-label">Klik INTERAKSI / Tekan 'E' untuk Buka Cabaran!</span> ✨
+        </p>
+    </div>
+
+    <!-- Mobile D-PAD Controls (Left Side) -->
+    <div class="absolute bottom-4 left-4 w-40 h-40 grid grid-cols-3 grid-rows-3 gap-1 z-20 md:hidden pointer-events-auto">
+        <div></div>
+        <button id="btn-up" class="dpad-btn col-start-2 row-start-1">▲</button>
+        <div></div>
+        <button id="btn-left" class="dpad-btn col-start-1 row-start-2">◄</button>
+        <div class="bg-slate-300/30 rounded-full"></div>
+        <button id="btn-right" class="dpad-btn col-start-3 row-start-2">►</button>
+        <div></div>
+        <button id="btn-down" class="dpad-btn col-start-2 row-start-3">▼</button>
+        <div></div>
+    </div>
+
+    <!-- Mobile Action Button (Right Side) -->
+    <div class="absolute bottom-6 right-6 z-20 md:bottom-8 md:right-8">
+        <button id="btn-interact" class="game-btn bg-emerald-500 hover:bg-emerald-400 text-white font-extrabold text-base sm:text-xl px-6 py-5 rounded-3xl border-4 border-white shadow-2xl flex items-center gap-2 active:scale-95 transition-transform">
+            💬 INTERAKSI
+        </button>
+    </div>
+
+    <!-- Interactive Challenge Modal -->
+    <div id="question-modal" class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-white border-8 border-yellow-400 rounded-3xl p-6 sm:p-8 max-w-lg w-full text-center shadow-2xl relative transform transition-all">
+            <!-- Mascot Header Icon -->
+            <div id="modal-icon" class="text-5xl mb-1 bounce-anim">🧵</div>
+            <h2 id="modal-title" class="text-xl sm:text-2xl font-black text-indigo-900 mb-2">Soalan Cabaran BAMUJA</h2>
+            
+            <p id="modal-question" class="text-base sm:text-lg font-semibold text-gray-800 mb-4 bg-amber-50 p-4 rounded-2xl border-2 border-amber-200 shadow-inner">
+                ...
+            </p>
+
+            <!-- Confidence Rating Selector -->
+            <div id="confidence-section" class="mb-4 bg-indigo-50 p-3 rounded-2xl border-2 border-indigo-100">
+                <p class="text-xs sm:text-sm font-bold text-indigo-900 mb-2">Sejauh mana anda yakin dengan soalan ini?</p>
+                <div class="flex justify-center gap-2">
+                    <button class="conf-btn text-xs font-bold px-3 py-1.5 rounded-xl border-2 border-emerald-400 bg-emerald-100 text-emerald-800 hover:bg-emerald-200" data-val="Yakin">🌟 Yakin</button>
+                    <button class="conf-btn text-xs font-bold px-3 py-1.5 rounded-xl border-2 border-amber-400 bg-amber-100 text-amber-800 hover:bg-amber-200" data-val="Agak-agak">🤔 Agak-agak</button>
+                    <button class="conf-btn text-xs font-bold px-3 py-1.5 rounded-xl border-2 border-rose-400 bg-rose-100 text-rose-800 hover:bg-rose-200" data-val="Teka sahaja">🎲 Teka sahaja</button>
+                </div>
+            </div>
+
+            <!-- Options Container -->
+            <div id="options-container" class="flex flex-col gap-2.5 mb-2">
+                <!-- Buttons injected via JS -->
+            </div>
+
+            <!-- Feedback Message -->
+            <div id="feedback-msg" class="hidden p-3.5 rounded-xl font-bold text-xs sm:text-base mt-3"></div>
+        </div>
+    </div>
+
+    <!-- Victory Screen Modal -->
+    <div id="victory-modal" class="hidden fixed inset-0 bg-sky-500/90 backdrop-blur-md z-50 flex items-center justify-center p-4">
+        <div class="bg-white border-8 border-yellow-300 rounded-3xl p-6 sm:p-8 max-w-md w-full text-center shadow-2xl">
+            <div class="text-6xl mb-2 bounce-anim">🏆</div>
+            <h1 class="text-2xl sm:text-3xl font-black text-indigo-900 mb-1">TAHNIAH! 🎉</h1>
+            <p class="text-sm sm:text-base font-bold text-gray-700 mb-4">Anda berjaya menyelesaikan Misi Peralatan Jahitan RBT Tahun 5!</p>
+            
+            <!-- Performance Dashboard Summary -->
+            <div class="bg-amber-50 p-4 rounded-2xl border-2 border-amber-200 mb-6 text-left text-xs sm:text-sm space-y-2">
+                <div class="flex justify-between font-bold text-gray-800">
+                    <span>🪙 Butang Emas Dikutip:</span>
+                    <span id="final-buttons-score" class="text-amber-600 font-extrabold">0 / 8</span>
+                </div>
+                <div class="flex justify-between font-bold text-gray-800">
+                    <span>🎯 Ketepatan Cubaan Pertama:</span>
+                    <span id="final-accuracy" class="text-emerald-600 font-extrabold">100%</span>
+                </div>
+                <div class="flex justify-between font-bold text-gray-800">
+                    <span>🌟 Aras Keyakinan Purata:</span>
+                    <span id="final-confidence" class="text-indigo-600 font-extrabold">Tinggi</span>
+                </div>
+            </div>
+
+            <button id="btn-restart" class="game-btn bg-yellow-400 hover:bg-yellow-300 text-slate-900 font-extrabold text-lg sm:text-xl px-8 py-4 rounded-2xl border-4 border-white shadow-xl w-full">
+                🔄 Main Semula Misi
+            </button>
+        </div>
+    </div>
+
+    <!-- GAME ENGINE SCRIPT -->
+    <script>
+        // --- WEB AUDIO SYNTHESIZER FOR SOUND EFFECTS ---
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        let audioCtx = null;
+
+        function initAudio() {
+            if (!audioCtx) audioCtx = new AudioCtx();
+        }
+
+        function playSound(type) {
+            initAudio();
+            if (!audioCtx) return;
+
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            const now = audioCtx.currentTime;
+
+            if (type === 'step') {
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(140, now);
+                osc.frequency.exponentialRampToValueAtTime(30, now + 0.08);
+                gain.gain.setValueAtTime(0.12, now);
+                gain.gain.linearRampToValueAtTime(0.01, now + 0.08);
+                osc.start(now);
+                osc.stop(now + 0.08);
+            } else if (type === 'collect') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(523.25, now);
+                osc.frequency.exponentialRampToValueAtTime(1046.50, now + 0.12);
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.linearRampToValueAtTime(0.01, now + 0.12);
+                osc.start(now);
+                osc.stop(now + 0.12);
+            } else if (type === 'correct') {
+                const notes = [261.63, 329.63, 392.00, 523.25];
+                notes.forEach((freq, idx) => {
+                    const noteOsc = audioCtx.createOscillator();
+                    const noteGain = audioCtx.createGain();
+                    noteOsc.connect(noteGain);
+                    noteGain.connect(audioCtx.destination);
+                    noteOsc.type = 'sine';
+                    noteOsc.frequency.setValueAtTime(freq, now + idx * 0.09);
+                    noteGain.gain.setValueAtTime(0.2, now + idx * 0.09);
+                    noteGain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.09 + 0.22);
+                    noteOsc.start(now + idx * 0.09);
+                    noteOsc.stop(now + idx * 0.09 + 0.22);
+                });
+            } else if (type === 'wrong') {
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(180, now);
+                osc.frequency.linearRampToValueAtTime(100, now + 0.28);
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.linearRampToValueAtTime(0.01, now + 0.28);
+                osc.start(now);
+                osc.stop(now + 0.28);
+            } else if (type === 'interact') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(440, now);
+                osc.frequency.exponentialRampToValueAtTime(880, now + 0.12);
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.linearRampToValueAtTime(0.01, now + 0.12);
+                osc.start(now);
+                osc.stop(now + 0.12);
+            } else if (type === 'victory') {
+                const freqs = [392, 523.25, 659.25, 783.99, 1046.50];
+                freqs.forEach((f, i) => {
+                    const vOsc = audioCtx.createOscillator();
+                    const vGain = audioCtx.createGain();
+                    vOsc.connect(vGain);
+                    vGain.connect(audioCtx.destination);
+                    vOsc.type = 'triangle';
+                    vOsc.frequency.setValueAtTime(f, now + i * 0.14);
+                    vGain.gain.setValueAtTime(0.25, now + i * 0.14);
+                    vGain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.14 + 0.35);
+                    vOsc.start(now + i * 0.14);
+                    vOsc.stop(now + i * 0.14 + 0.35);
+                });
+            }
+        }
+
+        // --- QUESTIONS DATA FOR YEAR 5 RBT JAHITAN ---
+        const checkpointsData = [
+            {
+                id: 1,
+                name: "Kapur Tukang Jahit",
+                icon: "✏️",
+                question: "Apakah fungsi utama Kapur Tukang Jahit?",
+                options: [
+                    { text: "A) Menanda garisan pemotongan & jahitan pada kain", correct: true },
+                    { text: "B) Memotong kepingan kain dengan lurus", correct: false },
+                    { text: "C) Menyambung dua kepingan kain", correct: false }
+                ],
+                explanation: "Tepat sekali! Kapur tukang jahit digunakan khusus untuk membuat tanda garisan jahitan atau pemotongan pada kain tanpa merosakkannya."
+            },
+            {
+                id: 2,
+                name: "Jarum Tangan & Benang",
+                icon: "🪡",
+                question: "Mengapakah Jarum Tangan dan Benang digunakan bersama?",
+                options: [
+                    { text: "A) Untuk menyambungkan kepingan kain secara manual", correct: true },
+                    { text: "B) Untuk mengukur saiz kelim pada pakaian", correct: false },
+                    { text: "C) Untuk meretas jahitan yang salah", correct: false }
+                ],
+                explanation: "Syabas! Jarum tangan membawa benang menerusi fabrik untuk membentuk mata jahitan dan menyambung kain."
+            },
+            {
+                id: 3,
+                name: "Penetas Jahitan",
+                icon: "✂️",
+                question: "Bilakah anda perlu menggunakan Penetas Jahitan?",
+                options: [
+                    { text: "A) Apabila tersalah jahit dan perlu memotong mata jahitan", correct: true },
+                    { text: "B) Untuk melipat dan menggosok tepi kain", correct: false },
+                    { text: "C) Untuk melukis corak pada kain", correct: false }
+                ],
+                explanation: "Hebat! Penetas jahitan digunakan khusus untuk memotong dan meretas mata jahitan yang silap atau membuka kelim."
+            }
+        ];
+
+        let currentCheckpointIndex = 0;
+        let isModalOpen = false;
+        let collectedButtons = 0;
+        const totalButtons = 8;
+        let attemptsCount = [0, 0, 0];
+        let selectedConfidence = "Yakin";
+
+        // --- THREE.JS SCENE SETUP ---
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87CEEB);
+        scene.fog = new THREE.FogExp2(0x87CEEB, 0.015);
+
+        const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        container.appendChild(renderer.domElement);
+
+        // --- LIGHTING ---
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.75);
+        scene.add(ambientLight);
+
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.85);
+        dirLight.position.set(25, 45, 25);
+        dirLight.castShadow = true;
+        dirLight.shadow.mapSize.width = 1024;
+        dirLight.shadow.mapSize.height = 1024;
+        dirLight.shadow.camera.near = 0.5;
+        dirLight.shadow.camera.far = 120;
+        dirLight.shadow.camera.left = -35;
+        dirLight.shadow.camera.right = 35;
+        dirLight.shadow.camera.top = 35;
+        dirLight.shadow.camera.bottom = -35;
+        scene.add(dirLight);
+
+        // --- ENVIRONMENT & MAZE CORRIDORS ---
+        const cpPositions = [
+            new THREE.Vector3(0, 0, -22),   // CP 1: Chalk
+            new THREE.Vector3(22, 0, -38),  // CP 2: Needle & Thread
+            new THREE.Vector3(-12, 0, -64)  // CP 3: Seam Ripper
+        ];
+
+        // Floor (Grass Ground)
+        const floorGeo = new THREE.PlaneGeometry(140, 140);
+        const floorMat = new THREE.MeshStandardMaterial({ color: 0x88D49E, roughness: 0.8 });
+        const floor = new THREE.Mesh(floorGeo, floorMat);
+        floor.rotation.x = -Math.PI / 2;
+        floor.receiveShadow = true;
+        scene.add(floor);
+
+        // Yellow Brick Corridor Path
+        const pathMat = new THREE.MeshStandardMaterial({ color: 0xFFF3B0, roughness: 0.4 });
+        const wallBoxes = [];
+
+        function createWall(x, z, width, depth, color = 0xFF9F1C) {
+            const wallGeo = new THREE.BoxGeometry(width, 2.6, depth);
+            const wallMat = new THREE.MeshStandardMaterial({ color: color, roughness: 0.5 });
+            const wall = new THREE.Mesh(wallGeo, wallMat);
+            wall.position.set(x, 1.3, z);
+            wall.castShadow = true;
+            wall.receiveShadow = true;
+            scene.add(wall);
+
+            const box = new THREE.Box3().setFromObject(wall);
+            wallBoxes.push(box);
+        }
+
+        function createPath(x, z, width, depth) {
+            const pGeo = new THREE.PlaneGeometry(width, depth);
+            const path = new THREE.Mesh(pGeo, pathMat);
+            path.rotation.x = -Math.PI / 2;
+            path.position.set(x, 0.01, z);
+            path.receiveShadow = true;
+            scene.add(path);
+        }
+
+        // Measuring Tape Archway Feature
+        function createMeasuringArch(x, z, width, rotationY = 0) {
+            const archGroup = new THREE.Group();
+            
+            // Posts
+            const postGeo = new THREE.BoxGeometry(0.6, 4, 0.6);
+            const postMat = new THREE.MeshStandardMaterial({ color: 0xFFD166 });
+            const leftP = new THREE.Mesh(postGeo, postMat);
+            leftP.position.set(-width / 2, 2, 0);
+            const rightP = new THREE.Mesh(postGeo, postMat);
+            rightP.position.set(width / 2, 2, 0);
+            
+            // Header Tape Beam
+            const beamGeo = new THREE.BoxGeometry(width + 0.8, 0.8, 0.4);
+            const beamMat = new THREE.MeshStandardMaterial({ color: 0xFFD166 });
+            const beam = new THREE.Mesh(beamGeo, beamMat);
+            beam.position.set(0, 3.8, 0);
+
+            archGroup.add(leftP, rightP, beam);
+            archGroup.position.set(x, 0, z);
+            archGroup.rotation.y = rotationY;
+            scene.add(archGroup);
+        }
+
+        // Build Paths & Corridors
+        // Segment 1: Start to CP1
+        createPath(0, -10, 8, 24);
+        createWall(-5, -10, 1, 24);
+        createWall(5, -10, 1, 24);
+        createMeasuringArch(0, -3, 8);
+
+        // CP1 Chamber
+        createPath(0, -22, 12, 12);
+        createWall(-7, -23, 1, 12);
+
+        // Segment 2: CP1 to CP2
+        createPath(11, -27, 22, 8);
+        createWall(11, -22, 17, 1);
+        createWall(11, -32, 22, 1);
+        createMeasuringArch(8, -27, 8, Math.PI / 2);
+
+        // CP2 Chamber
+        createPath(22, -38, 12, 14);
+        createWall(28, -38, 1, 14);
+
+        // Segment 3: CP2 to CP3
+        createPath(5, -48, 34, 8);
+        createWall(13, -43, 20, 1);
+        createWall(5, -53, 34, 1);
+        createMeasuringArch(15, -48, 8, Math.PI / 2);
+
+        // CP3 Chamber & Finish
+        createPath(-12, -64, 14, 20);
+        createWall(-19, -64, 1, 20);
+        createWall(-5, -73, 14, 1);
+        createWall(-12, -73, 14, 1);
+
+        // Glowing Floor Arrows
+        const arrowGroup = new THREE.Group();
+        scene.add(arrowGroup);
+
+        function addArrow(x, z, rotationY) {
+            const arrowShape = new THREE.Shape();
+            arrowShape.moveTo(0, 1.2);
+            arrowShape.lineTo(0.8, 0);
+            arrowShape.lineTo(0.3, 0);
+            arrowShape.lineTo(0.3, -1.2);
+            arrowShape.lineTo(-0.3, -1.2);
+            arrowShape.lineTo(-0.3, 0);
+            arrowShape.lineTo(-0.8, 0);
+            arrowShape.closePath();
+
+            const geom = new THREE.ShapeGeometry(arrowShape);
+            const mat = new THREE.MeshBasicMaterial({ color: 0xFFD700, side: THREE.DoubleSide });
+            const arrow = new THREE.Mesh(geom, mat);
+            arrow.rotation.x = -Math.PI / 2;
+            arrow.rotation.z = rotationY;
+            arrow.position.set(x, 0.03, z);
+            arrowGroup.add(arrow);
+        }
+
+        addArrow(0, -6, 0);
+        addArrow(0, -15, 0);
+        addArrow(5, -27, -Math.PI / 2);
+        addArrow(16, -27, -Math.PI / 2);
+        addArrow(22, -32, 0);
+        addArrow(16, -48, Math.PI / 2);
+        addArrow(0, -48, Math.PI / 2);
+        addArrow(-12, -56, 0);
+
+        // --- GOLDEN BUTTON COLLECTIBLES ---
+        const collectibles = [];
+        const buttonPositions = [
+            new THREE.Vector3(0, 0.8, -8),
+            new THREE.Vector3(0, 0.8, -16),
+            new THREE.Vector3(6, 0.8, -27),
+            new THREE.Vector3(16, 0.8, -27),
+            new THREE.Vector3(22, 0.8, -33),
+            new THREE.Vector3(18, 0.8, -48),
+            new THREE.Vector3(2, 0.8, -48),
+            new THREE.Vector3(-12, 0.8, -58)
+        ];
+
+        function createGoldenButton(pos) {
+            const group = new THREE.Group();
+            
+            // Main Button Cylinder
+            const btnGeo = new THREE.CylinderGeometry(0.5, 0.5, 0.15, 24);
+            const btnMat = new THREE.MeshStandardMaterial({ color: 0xFFD700, metalness: 0.8, roughness: 0.2 });
+            const btnMesh = new THREE.Mesh(btnGeo, btnMat);
+            btnMesh.castShadow = true;
+            group.add(btnMesh);
+
+            // Button Holes
+            const holeGeo = new THREE.CylinderGeometry(0.06, 0.06, 0.18, 12);
+            const holeMat = new THREE.MeshBasicMaterial({ color: 0x8B6508 });
+            const offset = 0.18;
+            [[-offset, -offset], [offset, -offset], [-offset, offset], [offset, offset]].forEach(([hx, hz]) => {
+                const h = new THREE.Mesh(holeGeo, holeMat);
+                h.position.set(hx, 0, hz);
+                group.add(h);
+            });
+
+            group.position.copy(pos);
+            scene.add(group);
+            collectibles.push({ mesh: group, collected: false, pos: pos });
+        }
+
+        buttonPositions.forEach(pos => createGoldenButton(pos));
+
+        // --- CHARACTERS SETUP ---
+
+        // PLAYER (Cute Sewing Mascot - BAMUJA Bot)
+        const playerGroup = new THREE.Group();
+        
+        const bodyGeo = new THREE.SphereGeometry(0.85, 32, 32);
+        const bodyMat = new THREE.MeshStandardMaterial({ color: 0x00BFFF, roughness: 0.3 });
+        const body = new THREE.Mesh(bodyGeo, bodyMat);
+        body.position.y = 0.85;
+        body.castShadow = true;
+        playerGroup.add(body);
+
+        // Eyes
+        const eyeGeo = new THREE.SphereGeometry(0.14, 16, 16);
+        const eyeMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+        const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
+        leftEye.position.set(-0.28, 1.0, 0.72);
+        const rightEye = new THREE.Mesh(eyeGeo, eyeMat);
+        rightEye.position.set(0.28, 1.0, 0.72);
+        playerGroup.add(leftEye, rightEye);
+
+        // Crown / Needle Tip
+        const needleGeo = new THREE.ConeGeometry(0.14, 0.8, 16);
+        const needleMat = new THREE.MeshStandardMaterial({ color: 0xFFD700, metalness: 0.8, roughness: 0.2 });
+        const needleHat = new THREE.Mesh(needleGeo, needleMat);
+        needleHat.position.set(0, 1.9, 0);
+        playerGroup.add(needleHat);
+
+        playerGroup.position.set(0, 0, 2);
+        scene.add(playerGroup);
+
+        // BAMUJA NPC MASCOTS
+        const npcObjects = [];
+
+        function createBamujaNPC(index, pos) {
+            const group = new THREE.Group();
+
+            if (index === 0) {
+                // Kapur Tukang Jahit (Blue Prism)
+                const chalkGeo = new THREE.CylinderGeometry(0.1, 1.2, 1.8, 3);
+                const chalkMat = new THREE.MeshStandardMaterial({ color: 0x00BFFF, roughness: 0.3 });
+                const chalk = new THREE.Mesh(chalkGeo, chalkMat);
+                chalk.position.y = 1.1;
+                chalk.castShadow = true;
+                group.add(chalk);
+            } else if (index === 1) {
+                // Jarum & Benang (Rainbow Spool & Needle)
+                const spoolGeo = new THREE.CylinderGeometry(0.8, 0.8, 1.5, 16);
+                const spoolMat = new THREE.MeshStandardMaterial({ color: 0xFF69B4, roughness: 0.4 });
+                const spool = new THREE.Mesh(spoolGeo, spoolMat);
+                spool.position.y = 1.0;
+                spool.castShadow = true;
+                group.add(spool);
+
+                const needleG = new THREE.CylinderGeometry(0.05, 0.05, 2.2, 16);
+                const needleM = new THREE.MeshStandardMaterial({ color: 0xE0E0E0, metalness: 0.9 });
+                const nMesh = new THREE.Mesh(needleG, needleM);
+                nMesh.position.set(0.6, 1.3, 0);
+                nMesh.rotation.z = -0.3;
+                group.add(nMesh);
+            } else if (index === 2) {
+                // Penetas Jahitan (Blue & Red Tool)
+                const handleGeo = new THREE.CylinderGeometry(0.38, 0.3, 1.8, 16);
+                const handleMat = new THREE.MeshStandardMaterial({ color: 0x1E90FF });
+                const handle = new THREE.Mesh(handleGeo, handleMat);
+                handle.position.y = 1.0;
+                group.add(handle);
+
+                const forkGeo = new THREE.ConeGeometry(0.28, 0.9, 16);
+                const forkMat = new THREE.MeshStandardMaterial({ color: 0xDC143C });
+                const fork = new THREE.Mesh(forkGeo, forkMat);
+                fork.position.y = 2.0;
+                group.add(fork);
+            }
+
+            // Glowing Pedestal Ring
+            const ringGeo = new THREE.RingGeometry(1.2, 1.6, 32);
+            const ringMat = new THREE.MeshBasicMaterial({ color: 0xFFD700, side: THREE.DoubleSide });
+            const ring = new THREE.Mesh(ringGeo, ringMat);
+            ring.rotation.x = -Math.PI / 2;
+            ring.position.y = 0.02;
+            group.add(ring);
+
+            group.position.copy(pos);
+            scene.add(group);
+            npcObjects.push(group);
+        }
+
+        cpPositions.forEach((pos, idx) => createBamujaNPC(idx, pos));
+
+        // --- CONTROLS & MOVEMENT ENGINE ---
+        const keys = { up: false, down: false, left: false, right: false };
+        const moveSpeed = 0.15;
+        const rotateSpeed = 0.045;
+
+        window.addEventListener('keydown', (e) => {
+            if (isModalOpen) return;
+            if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') keys.up = true;
+            if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') keys.down = true;
+            if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') keys.left = true;
+            if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') keys.right = true;
+            if (e.key === ' ' || e.key === 'e' || e.key === 'E') handleInteraction();
+        });
+
+        window.addEventListener('keyup', (e) => {
+            if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') keys.up = false;
+            if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') keys.down = false;
+            if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') keys.left = false;
+            if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') keys.right = false;
+        });
+
+        function bindTouchBtn(id, keyProp) {
+            const btn = document.getElementById(id);
+            const start = (e) => { e.preventDefault(); keys[keyProp] = true; initAudio(); };
+            const end = (e) => { e.preventDefault(); keys[keyProp] = false; };
+            btn.addEventListener('touchstart', start, { passive: false });
+            btn.addEventListener('touchend', end, { passive: false });
+            btn.addEventListener('mousedown', start);
+            btn.addEventListener('mouseup', end);
+        }
+
+        bindTouchBtn('btn-up', 'up');
+        bindTouchBtn('btn-down', 'down');
+        bindTouchBtn('btn-left', 'left');
+        bindTouchBtn('btn-right', 'right');
+
+        document.getElementById('btn-interact').addEventListener('click', handleInteraction);
+
+        const playerRadius = 0.8;
+
+        function updatePlayerMovement() {
+            if (isModalOpen) return;
+
+            let moveX = 0;
+            let moveZ = 0;
+
+            if (keys.left) playerGroup.rotation.y += rotateSpeed;
+            if (keys.right) playerGroup.rotation.y -= rotateSpeed;
+
+            if (keys.up) {
+                moveX -= Math.sin(playerGroup.rotation.y) * moveSpeed;
+                moveZ -= Math.cos(playerGroup.rotation.y) * moveSpeed;
+            }
+            if (keys.down) {
+                moveX += Math.sin(playerGroup.rotation.y) * (moveSpeed * 0.6);
+                moveZ += Math.cos(playerGroup.rotation.y) * (moveSpeed * 0.6);
+            }
+
+            if (moveX !== 0 || moveZ !== 0) {
+                if (Math.random() < 0.15) playSound('step');
+
+                const nextPos = playerGroup.position.clone();
+                nextPos.x += moveX;
+                if (!checkWallCollision(nextPos)) playerGroup.position.x = nextPos.x;
+
+                nextPos.x = playerGroup.position.x;
+                nextPos.z += moveZ;
+                if (!checkWallCollision(nextPos)) playerGroup.position.z = nextPos.z;
+
+                body.position.y = 0.85 + Math.abs(Math.sin(Date.now() * 0.012)) * 0.15;
+            } else {
+                body.position.y = 0.85;
+            }
+
+            // Check Golden Button Collectibles Pickup
+            collectibles.forEach(item => {
+                if (!item.collected && playerGroup.position.distanceTo(item.pos) < 1.2) {
+                    item.collected = true;
+                    scene.remove(item.mesh);
+                    collectedButtons++;
+                    playSound('collect');
+                    document.getElementById('button-count').innerText = `${collectedButtons} / ${totalButtons}`;
+                }
+            });
+        }
+
+        function checkWallCollision(targetPos) {
+            const playerBox = new THREE.Box3(
+                new THREE.Vector3(targetPos.x - playerRadius, 0, targetPos.z - playerRadius),
+                new THREE.Vector3(targetPos.x + playerRadius, 2, targetPos.z + playerRadius)
+            );
+
+            for (let box of wallBoxes) {
+                if (playerBox.intersectsBox(box)) return true;
+            }
+            return false;
+        }
+
+        function updateCamera() {
+            const cameraOffset = new THREE.Vector3(0, 6.5, 9.5);
+            cameraOffset.applyAxisAngle(new THREE.Vector3(0, 1, 0), playerGroup.rotation.y);
+            
+            const targetCamPos = playerGroup.position.clone().add(cameraOffset);
+            camera.position.lerp(targetCamPos, 0.1);
+            
+            const lookTarget = playerGroup.position.clone().add(new THREE.Vector3(0, 1.2, 0));
+            camera.lookAt(lookTarget);
+        }
+
+        // PROXIMITY CHECK
+        const proximityPrompt = document.getElementById('proximity-prompt');
+        let activeCheckpointNearby = false;
+
+        function checkProximity() {
+            if (currentCheckpointIndex >= checkpointsData.length) {
+                proximityPrompt.classList.add('hidden');
+                return;
+            }
+
+            const targetNpcPos = cpPositions[currentCheckpointIndex];
+            const dist = playerGroup.position.distanceTo(targetNpcPos);
+
+            if (dist < 3.8) {
+                activeCheckpointNearby = true;
+                proximityPrompt.classList.remove('hidden');
+            } else {
+                activeCheckpointNearby = false;
+                proximityPrompt.classList.add('hidden');
+            }
+        }
+
+        function handleInteraction() {
+            initAudio();
+            if (activeCheckpointNearby && !isModalOpen) {
+                playSound('interact');
+                openQuestionModal(currentCheckpointIndex);
+            }
+        }
+
+        // --- QUESTION MODAL LOGIC & CONFIDENCE RATING ---
+        const modal = document.getElementById('question-modal');
+        const modalTitle = document.getElementById('modal-title');
+        const modalQuestion = document.getElementById('modal-question');
+        const optionsContainer = document.getElementById('options-container');
+        const feedbackMsg = document.getElementById('feedback-msg');
+
+        // Confidence Buttons listener
+        document.querySelectorAll('.conf-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                document.querySelectorAll('.conf-btn').forEach(b => b.classList.remove('ring-4', 'ring-indigo-500'));
+                e.target.classList.add('ring-4', 'ring-indigo-500');
+                selectedConfidence = e.target.getAttribute('data-val');
+            });
+        });
+
+        function openQuestionModal(index) {
+            isModalOpen = true;
+            const data = checkpointsData[index];
+
+            document.getElementById('modal-icon').innerText = data.icon;
+            modalTitle.innerText = `Cabaran ${index + 1}: ${data.name}`;
+            modalQuestion.innerText = data.question;
+
+            feedbackMsg.classList.add('hidden');
+            optionsContainer.innerHTML = '';
+
+            data.options.forEach((opt) => {
+                const btn = document.createElement('button');
+                btn.className = "game-btn w-full bg-indigo-50 hover:bg-indigo-100 text-indigo-900 font-bold text-left px-4 py-3 rounded-2xl border-2 border-indigo-200 shadow text-xs sm:text-base";
+                btn.innerText = opt.text;
+                btn.onclick = () => checkAnswer(opt.correct, data.explanation, index);
+                optionsContainer.appendChild(btn);
+            });
+
+            modal.classList.remove('hidden');
+        }
+
+        function checkAnswer(isCorrect, explanation, cpIdx) {
+            attemptsCount[cpIdx]++;
+            feedbackMsg.classList.remove('hidden');
+            
+            if (isCorrect) {
+                playSound('correct');
+                confetti({ particleCount: 60, spread: 70, origin: { y: 0.6 } });
+                
+                feedbackMsg.className = "p-3.5 rounded-xl font-bold text-xs sm:text-base bg-emerald-100 text-emerald-900 border-2 border-emerald-300";
+                feedbackMsg.innerText = `🎉 TEPAT SEKALI!\n${explanation}`;
+
+                Array.from(optionsContainer.children).forEach(b => b.disabled = true);
+
+                setTimeout(() => {
+                    modal.classList.add('hidden');
+                    isModalOpen = false;
+                    advanceProgress();
+                }, 2400);
+            } else {
+                playSound('wrong');
+                feedbackMsg.className = "p-3.5 rounded-xl font-bold text-xs sm:text-base bg-rose-100 text-rose-900 border-2 border-rose-300";
+                feedbackMsg.innerText = "❌ CUBA LAGI! Bincang dengan rakan atau fikirkan semula fungsi alatan.";
+            }
+        }
+
+        function advanceProgress() {
+            const badge = document.getElementById(`badge-${currentCheckpointIndex + 1}`);
+            if (badge) {
+                badge.className = "w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center font-bold text-white text-xs border-2 border-white shadow pulse-glow";
+                badge.innerText = "✓";
+            }
+
+            currentCheckpointIndex++;
+
+            const objText = document.getElementById('objective-text');
+            if (currentCheckpointIndex < checkpointsData.length) {
+                objText.innerText = `Cari ${checkpointsData[currentCheckpointIndex].name} di Zone ${currentCheckpointIndex + 1}!`;
+            } else {
+                objText.innerText = "Selesai Semua Cabaran!";
+                playSound('victory');
+                confetti({ particleCount: 150, spread: 100, origin: { y: 0.5 } });
+
+                // Calculate summary stats
+                document.getElementById('final-buttons-score').innerText = `${collectedButtons} / ${totalButtons}`;
+                const firstTryCount = attemptsCount.filter(a => a === 1).length;
+                const accuracyPct = Math.round((firstTryCount / 3) * 100);
+                document.getElementById('final-accuracy').innerText = `${accuracyPct}%`;
+                document.getElementById('final-confidence').innerText = selectedConfidence;
+
+                document.getElementById('victory-modal').classList.remove('hidden');
+            }
+        }
+
+        document.getElementById('btn-restart').onclick = () => {
+            location.reload();
+        };
+
+        // --- MINI-MAP RADAR 2D CANVAS ---
+        const minimapCanvas = document.getElementById('minimap');
+        const ctx = minimapCanvas.getContext('2d');
+
+        function updateMinimap() {
+            ctx.clearRect(0, 0, 100, 100);
+
+            // Draw player position (Center scaling)
+            const mapScale = 0.8;
+            const mapCenterX = 50;
+            const mapCenterY = 50;
+
+            // Draw Checkpoint Locations
+            cpPositions.forEach((pos, idx) => {
+                const mapX = mapCenterX + (pos.x - playerGroup.position.x) * mapScale;
+                const mapY = mapCenterY + (pos.z - playerGroup.position.z) * mapScale;
+
+                if (mapX >= 5 && mapX <= 95 && mapY >= 5 && mapY <= 95) {
+                    ctx.fillStyle = idx < currentCheckpointIndex ? '#10B981' : '#F59E0B';
+                    ctx.beginPath();
+                    ctx.arc(mapX, mapY, 5, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            });
+
+            // Draw Player dot (Green with pulse)
+            ctx.fillStyle = '#3B82F6';
+            ctx.beginPath();
+            ctx.arc(mapCenterX, mapCenterY, 5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#FFFFFF';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
+
+        // --- MAIN ANIMATION LOOP ---
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // Animate Collectibles
+            collectibles.forEach(item => {
+                if (!item.collected) {
+                    item.mesh.rotation.y += 0.03;
+                    item.mesh.position.y = item.pos.y + Math.sin(Date.now() * 0.004) * 0.1;
+                }
+            });
+
+            // Animate Floor Arrows
+            arrowGroup.children.forEach(arrow => {
+                arrow.position.y = 0.03 + Math.sin(Date.now() * 0.005) * 0.02;
+            });
+
+            // Animate BAMUJA NPCs
+            npcObjects.forEach((npc, i) => {
+                npc.position.y = Math.sin(Date.now() * 0.003 + i) * 0.15;
+                npc.rotation.y += 0.01;
+            });
+
+            updatePlayerMovement();
+            updateCamera();
+            checkProximity();
+            updateMinimap();
+
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        window.onload = () => {
+            animate();
+        };
+    </script>
+</body>
+</html>
